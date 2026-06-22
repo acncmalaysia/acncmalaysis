@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: donor_db
+    environment:
+      POSTGRES_DB: donor_missionary
+      POSTGRES_USER: donor_user
+      POSTGRES_PASSWORD: secure_password_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U donor_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - donor_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: donor_backend
+    environment:
+      DATABASE_URL: postgresql://donor_user:secure_password_change_me@postgres:5432/donor_missionary
+      JWT_SECRET_KEY: your_jwt_secret_key_change_me_in_production
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - donor_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: donor_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - donor_network
+
+volumes:
+  postgres_data:
+
+networks:
+  donor_network:
+    driver: bridge
